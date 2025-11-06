@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Latent World</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="container-fluid py-2">
+      <div class="row justify-content-center">
+        <div class="col-12" style="width: 96%; max-width: 96%;">
+          <div class="card">
+            <div class="card-body p-4">
+              <!-- Image Output Area - Centered Top -->
+              <div class="text-center mb-5">
+                <div id="generation-dashboard">
+                </div>
+              </div>
+
+
+                         
+            </div>
+          </div>
+
+          <br>
+
+          <div class="card2">
+            <div class="card-body p-4">
+                
+              <!-- Status Message -->
+              <div id="status" class="mt-3 small fw-semibold" style="min-height: 24px;"></div>
+              
+              <!-- Storage Dropdown -->
+              <div class="row mb-4">
+                <div class="col-md-8">
+                  <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0">STORAGE:</label>
+                    <select class="form-control" id="storage-dropdown" style="flex: 1;">
+                      <option value="">Select image</option>
+                    </select>
+                    <br><br>
+                    <button class="btn" id="refresh-storage-btn" type="button">REFRESH</button>
+                  </div>
+                  <div class="form-text" id="storage-count">0 images in memory</div>
+                </div>
+              </div>
+              
+              <!-- Form Row -->
+              <form id="generate-form">
+                <div class="row g-3 mb-4">
+                  <div class="col-md-8">
+                    <label class="form-label fs-5">Prompt</label>
+                    <textarea 
+                      class="form-control form-control-lg" 
+                      id="prompt-input" 
+                      name="prompt" 
+                      rows="3" 
+                      placeholder="prompt"
+                      required></textarea>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex flex-column h-100 justify-content-between">
+                      <div>
+                        <label class="form-label">Steps</label>
+                        <input type="number" class="form-control" name="num_inference_steps" value="30" min="5" max="75" />
+                        <div class="form-text small">Quality: 30-50</div>
+                      </div>
+                      <div>
+                        <label class="form-label">Guidance scale</label>
+                        <input type="number" class="form-control" name="guidance_scale" value="7.0" step="0.1" min="1" max="20" />
+                        <div class="form-text small">7.0-9.0</div>
+                      </div>
+                      <div>
+                        <label class="form-label">Seed (optional)</label>
+                        <input type="number" class="form-control" name="seed" placeholder="Random" />
+
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="row">
+                  <div class="col-2">
+                    <button class="btn btn-lg w-100 py-3" type="submit" id="generate-btn" style="border: 2px solid black;">
+                      <span id="generate-btn-text">Generate image</span>
+                    </button>
+                  </div>
+                  <div class="col-2">
+                    <button class="btn btn-lg w-100 py-3" type="button" id="generate2-btn" style="border: 2px solid black;">
+                      <span id="generate2-btn-text">Generate 2</span>
+                    </button>
+                  </div>
+                  <div class="col-2">
+                    <button class="btn btn-lg w-100 py-3" type="button" id="generate3-btn" style="border: 2px solid black;">
+                      <span id="generate3-btn-text">Generate 3</span>
+                    </button>
+                  </div>
+                  <div class="col-2">
+                    <button class="btn btn-lg w-100 py-3" type="button" id="generate-depth-btn" style="border: 2px solid black;">
+                      <span id="generate-depth-btn-text">Generate Depth</span>
+                    </button>
+                  </div>
+                </div>
+              </form> 
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script src="/static/app.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+  </body>
+</html>

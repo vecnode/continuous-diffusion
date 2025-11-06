@@ -1,0 +1,23 @@
+# FastAPI server
+fastapi[standard]
+uvicorn
+
+# PyTorch and ML frameworks with CUDA 12.8 support
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch>=2.5.0
+torchvision>=0.20.0
+
+# Image processing
+Pillow
+opencv-python
+numpy
+
+# Visualization
+matplotlib
+
+# Diffusion models
+diffusers>=0.29.0
+transformers>=4.41.0
+accelerate
+safetensors
+

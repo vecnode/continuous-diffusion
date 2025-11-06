@@ -1,0 +1,180 @@
+/* Simple Brutalist Design */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+
+body {
+  background: #ffffff;
+  min-height: 100vh;
+  padding: 2rem 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #000000;
+}
+
+
+
+* {
+  border-radius: 0 !important;
+}
+
+*:focus {
+  outline: none !important;
+}
+
+
+/* div behind dashboard */
+.text-center {
+  background-color: #808080 !important;
+}
+
+
+
+
+
+
+select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-width: 2px !important;
+  background: #f0f0f0 !important;
+}
+
+
+
+
+
+
+
+
+/* ============================================================= */
+/* Generation Dashboard */
+/* ============================================================= */
+
+
+
+
+#generation-dashboard {
+  height: 512px !important;
+  width: 512px !important;
+  position: relative;
+  background: #ffffff00 !important;
+  border-radius: 0px;
+  border: 2px solid red !important;
+  margin: 0 auto;
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+}
+
+#generation-dashboard img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border: 4px solid #7c7c7c;
+  border-radius: 0;
+  display: block;
+}
+
+
+
+#generated-image {
+  border: none !important;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+.card-body {
+  background: #ffffff;
+  padding: 2rem;
+  border-radius: 0;
+}
+
+
+
+.card {
+  border-radius: 0;
+  border: 4px solid #000000;
+  background: #ffffff;
+}
+
+
+.card2 {
+  border-radius: 0;
+  border: 2px solid #000000;
+  background: #ffffff;
+}
+
+
+
+
+
+.form-control {
+  border-radius: 0;
+  border: 2px solid #000000;
+  background: #ffffff;
+  color: #000000;
+}
+
+.form-control:focus {
+  border-color: #000000;
+  box-shadow: none;
+  outline: none !important;
+  border-width: 2px;
+  background: #f0f0f0;
+}
+
+.form-control::placeholder {
+  color: #808080;
+  border: none !important;
+}
+
+.btn-primary {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 0;
+}
+
+.btn-primary:hover {
+  background: #333333;
+  border-color: #333333;
+}
+
+
+
+
+.btn-primary:disabled {
+  background: #808080;
+  border-color: #808080;
+}
+
+.btn-outline-primary {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 0;
+}
+
+.btn-outline-primary:hover {
+  background: #333333;
+  border-color: #333333;
+}
+
+.btn-outline-primary:focus,
+.btn-outline-primary:active {
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #000000;
+  outline: none;
+  box-shadow: none;
+}
+
