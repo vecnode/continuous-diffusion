@@ -30,8 +30,9 @@ env.bak/
 venv.bak/
 
 # Project-specific folders
-libs/
+
 models/
+Depth-Anything-V2/
 
 # Environment variables
 .env

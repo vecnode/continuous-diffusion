@@ -5,7 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Latent World</title>
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <link href="/static/libs/bootstrap.min.css" rel="stylesheet">
+    <!-- Three.js -->
+    <script>
+      // Suppress Three.js deprecation warning
+      // const originalWarn = console.warn;
+      // console.warn = function(...args) {
+      //   if (args[0] && typeof args[0] === 'string' && args[0].includes('deprecated') && args[0].includes('three')) {
+      //     return; // Suppress Three.js deprecation warnings
+      //   }
+      //   originalWarn.apply(console, args);
+      // };
+    </script>
+    <script src="/static/libs/three.min.js"></script>
+    <script src="/static/libs/Orbitcontrols.js"></script>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -16,7 +29,10 @@
             <div class="card-body p-4">
               <!-- Image Output Area - Centered Top -->
               <div class="text-center mb-5">
-                <div id="generation-dashboard">
+                <div class="dashboard-container">
+                  <div id="generation-dashboard">
+                  </div>
+                  <canvas id="3d-field"></canvas>
                 </div>
               </div>
 
@@ -32,6 +48,16 @@
                 
               <!-- Status Message -->
               <div id="status" class="mt-3 small fw-semibold" style="min-height: 24px;"></div>
+              
+              <!-- Camera Control Buttons -->
+              <div class="row mb-3">
+                <div class="col-md-8">
+                  <div class="d-flex align-items-center gap-2">
+                    <button class="btn" id="center-image-btn" type="button" style="border: 2px solid black;">CENTER IMAGE</button>
+                    <button class="btn" id="center-cube-btn" type="button" style="border: 2px solid black;">CENTER CUBE</button>
+                  </div>
+                </div>
+              </div>
               
               <!-- Storage Dropdown -->
               <div class="row mb-4">
@@ -103,8 +129,37 @@
                       <span id="generate-depth-btn-text">Generate Depth</span>
                     </button>
                   </div>
+                  <div class="col-2">
+                    <button class="btn btn-lg w-100 py-3" type="button" id="generate-3d-field-btn" style="border: 2px solid black;">
+                      <span id="generate-3d-field-btn-text">Generate 3D Field</span>
+                    </button>
+                  </div>
+                  <div class="col-2">
+                    <button class="btn btn-lg w-100 py-3" type="button" id="points-to-mesh-btn" style="border: 2px solid black;">
+                      <span id="points-to-mesh-btn-text">POINTS-TO-MESH</span>
+                    </button>
+                  </div>
                 </div>
-              </form> 
+                
+                <!-- Outpaint Controls -->
+                <div class="row mt-4">
+                  <div class="col-md-8">
+                    <div class="d-flex align-items-center gap-2">
+                      <label class="form-label mb-0">OUTPAINT:</label>
+                      <select class="form-control" id="outpaint-side-select" style="flex: 0 0 150px;">
+                        <option value="right">Right</option>
+                        <option value="left">Left</option>
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                      <button class="btn btn-lg" type="button" id="outpaint-btn" style="border: 2px solid black;">
+                        <span id="outpaint-btn-text">Outpaint</span>
+                      </button>
+                    </div>
+                    <div class="form-text small mt-1">Extend image in selected direction and add to 3D scene</div>
+                  </div>
+                </div>
+              </form>
             </div>
           </div>
         </div>

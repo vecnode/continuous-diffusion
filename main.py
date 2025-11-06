@@ -23,7 +23,7 @@ import matplotlib
 from diffusers import DiffusionPipeline
 from diffusers import StableDiffusionXLInpaintPipeline
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 # Add libs to path
@@ -51,6 +51,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return FileResponse("static/index.html")
+
+@app.get("/favicon.ico")
+async def favicon():
+    # Return 204 No Content to suppress favicon 404 errors
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 
@@ -822,11 +828,376 @@ async def generate_depth_map(
         }, status_code=500)
 
 
+# ==========================================================
+# API OUTPAINT
+# ==========================================================
+
+def outpaint_with_inpaint(
+    img: Image.Image,
+    side: str = "right",           # "left" | "right" | "top" | "bottom"
+    add: int = 512,                # how many pixels to add
+    prompt: str = "",
+    guidance_scale: float = 5.0,
+    steps: int = 30,
+    overlap: int = 32              # small overlap strip to help blend
+) -> Image.Image:
+    assert side in {"left","right","top","bottom"}
+    
+    # Ensure image is in RGB mode
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    
+    w, h = img.size
+    
+    # Ensure add is a multiple of 8 for SDXL compatibility
+    add = ((add + 7) // 8) * 8
+    
+    if side in {"left","right"}:
+        W, H = w + add, h
+    else:
+        W, H = w, h + add
+
+    # Ensure final dimensions are multiples of 8 (round up to avoid truncation issues)
+    W = ((W + 7) // 8) * 8
+    H = ((H + 7) // 8) * 8
+
+    # 1) Build bigger canvas and paste original
+    # Use white background - SDXL inpainting works better with white
+    canvas = Image.new("RGB", (W, H), (255, 255, 255))
+    if side == "left":
+        paste_xy = (add, 0)
+    elif side == "right":
+        paste_xy = (0, 0)
+    elif side == "top":
+        paste_xy = (0, add)
+    else: # bottom
+        paste_xy = (0, 0)
+    canvas.paste(img, paste_xy)
+    
+    # Verify the image was pasted correctly
+    if canvas.size != (W, H):
+        raise ValueError(f"Canvas size mismatch: expected {(W, H)}, got {canvas.size}")
+
+    # 2) Build mask: WHITE (255) = area to inpaint; BLACK (0) = keep original
+    # SDXL inpainting uses: white pixels = inpaint, black pixels = keep
+    mask = Image.new("L", (W, H), 0)
+    draw = ImageDraw.Draw(mask)
+
+    # Mask the new area plus a small overlap into the original for blending
+    if side == "left":
+        # Mask from 0 to add+overlap (new area + overlap strip)
+        draw.rectangle([0, 0, add + overlap, H], fill=255)
+    elif side == "right":
+        # Mask from w-overlap to W (overlap strip + new area)
+        draw.rectangle([w - overlap, 0, W, H], fill=255)
+    elif side == "top":
+        # Mask from 0 to add+overlap (new area + overlap strip)
+        draw.rectangle([0, 0, W, add + overlap], fill=255)
+    else: # bottom
+        # Mask from h-overlap to H (overlap strip + new area)
+        draw.rectangle([0, h - overlap, W, H], fill=255)
+
+    # 3) Ensure we have a valid prompt
+    if not prompt or not prompt.strip():
+        prompt = "continuation of the scene, seamless extension, consistent style and lighting"
+
+    # 4) Verify inputs are valid before processing
+    # Ensure canvas and mask are the same size
+    if canvas.size != mask.size:
+        raise ValueError(f"Canvas and mask size mismatch: canvas {canvas.size}, mask {mask.size}")
+    
+    # Verify mask has white pixels (areas to inpaint)
+    mask_array = np.array(mask)
+    white_pixels = np.sum(mask_array == 255)
+    if white_pixels == 0:
+        raise ValueError("Mask has no white pixels - nothing to inpaint!")
+    
+    # Verify canvas is valid (no NaN or inf values)
+    canvas_array = np.array(canvas)
+    if np.any(np.isnan(canvas_array)) or np.any(np.isinf(canvas_array)):
+        raise ValueError("Canvas contains invalid values (NaN or inf)")
+    
+    # Ensure canvas values are in valid range [0, 255] and proper dtype
+    canvas_array = np.clip(canvas_array, 0, 255).astype(np.uint8)
+    canvas = Image.fromarray(canvas_array)
+    
+    # Ensure mask is also uint8
+    mask_array = np.array(mask)
+    mask_array = np.clip(mask_array, 0, 255).astype(np.uint8)
+    mask = Image.fromarray(mask_array, mode='L')
+    
+    # 5) Run SDXL Inpaint with proper parameters
+    # For outpainting, we want full synthesis in the masked area
+    # Use strength=1.0 for complete regeneration of masked regions
+    generator = torch.Generator(device=DEVICE)
+    
+    # Try without autocast first - autocast can cause black images in some cases
+    # If CUDA is available, we'll use the model's dtype directly
+    try:
+        # Run without autocast to avoid potential issues
+        out = inpaint_model(
+            prompt=prompt,
+            image=canvas,
+            mask_image=mask,
+            num_inference_steps=steps,
+            guidance_scale=guidance_scale,
+            strength=1.0,  # Full strength for complete synthesis in masked area
+            generator=generator,
+        ).images[0]
+    except Exception as e:
+        # If that fails, try with autocast as fallback
+        try:
+            with torch.autocast("cuda"):
+                out = inpaint_model(
+                    prompt=prompt,
+                    image=canvas,
+                    mask_image=mask,
+                    num_inference_steps=steps,
+                    guidance_scale=guidance_scale,
+                    strength=1.0,
+                    generator=generator,
+                ).images[0]
+        except Exception as e2:
+            raise RuntimeError(f"Inpainting failed: {str(e)} (fallback also failed: {str(e2)})")
+
+    # Ensure output is RGB and has valid content
+    if out.mode != "RGB":
+        out = out.convert("RGB")
+    
+    # Verify output is not all black and has valid values
+    out_array = np.array(out)
+    
+    # Check for invalid values
+    if np.any(np.isnan(out_array)) or np.any(np.isinf(out_array)):
+        raise RuntimeError("Inpainting produced invalid values (NaN or inf)")
+    
+    # Check if output is all black (or very dark)
+    if np.all(out_array < 10):  # Allow some tolerance
+        raise RuntimeError("Inpainting produced a black/dark image - check mask and prompt")
+    
+    # Ensure output values are in valid range
+    out_array = np.clip(out_array, 0, 255).astype(np.uint8)
+    out = Image.fromarray(out_array)
+
+    return out
+
+
+@app.post("/api/outpaint")
+async def generate_outpaint(
+    image_id: str = Form(...),
+    side: str = Form("right"),           # "left" | "right" | "top" | "bottom"
+    add: Optional[int] = Form(512),      # how many pixels to add
+    prompt: Optional[str] = Form(""),     # prompt for outpaint
+    guidance_scale: Optional[float] = Form(None),
+    num_inference_steps: Optional[int] = Form(None),
+    overlap: Optional[int] = Form(32)     # small overlap strip to help blend
+):
+    """
+    Outpaint (extend) an image by adding pixels to one side using inpainting.
+    Returns the outpainted image and stores it in memory.
+    """
+    # Parse and validate form data
+    if side not in {"left", "right", "top", "bottom"}:
+        return JSONResponse({
+            "success": False,
+            "error": f"Invalid side: {side}. Must be 'left', 'right', 'top', or 'bottom'"
+        }, status_code=400)
+    
+    add_pixels = int(add) if add and str(add).strip() else 512
+    overlap_pixels = int(overlap) if overlap and str(overlap).strip() else 32
+    guidance_scale = float(guidance_scale) if guidance_scale and str(guidance_scale).strip() else 5.0
+    num_inference_steps = int(num_inference_steps) if num_inference_steps and str(num_inference_steps).strip() else 30
+    prompt_str = prompt if prompt and str(prompt).strip() else ""
+    
+    try:
+        # Find the image in storage
+        source_image_data = None
+        for img_data in STORAGE_IMAGE_DATA:
+            if img_data["image_id"] == image_id:
+                source_image_data = img_data
+                break
+        
+        if source_image_data is None:
+            return JSONResponse({
+                "success": False,
+                "error": "Image not found in storage"
+            }, status_code=404)
+        
+        # Get PIL Image from storage
+        img_pil = source_image_data["image"]
+        
+        # Use prompt from source image if not provided, and enhance it for outpainting
+        if not prompt_str:
+            prompt_str = source_image_data.get("prompt", "")
+            if not prompt_str:
+                prompt_str = "wide cinematic scene, consistent style"
+        
+        # Enhance prompt for outpainting - add context about seamless extension
+        # This helps the model understand it should continue the scene
+        if prompt_str and len(prompt_str) > 0:
+            # Add outpainting context to the prompt
+            side_descriptions = {
+                "right": "extending to the right",
+                "left": "extending to the left", 
+                "top": "extending upward",
+                "bottom": "extending downward"
+            }
+            side_desc = side_descriptions.get(side, "extending")
+            enhanced_prompt = f"{prompt_str}, seamless {side_desc}, continuation of scene, consistent lighting and style"
+        else:
+            enhanced_prompt = f"seamless extension, continuation of the scene, consistent style and lighting"
+        
+        # Perform outpaint
+        result = outpaint_with_inpaint(
+            img=img_pil,
+            side=side,
+            add=add_pixels,
+            prompt=enhanced_prompt,
+            guidance_scale=guidance_scale,
+            steps=num_inference_steps,
+            overlap=overlap_pixels
+        )
+        
+        # Generate unique ID
+        new_image_id = str(uuid.uuid4())
+        
+        # Convert image to base64 for browser
+        image_base64 = pil_to_base64(result)
+        
+        # Store image data in memory (keep max 30)
+        image_data = {
+            "image_id": new_image_id,
+            "image": result,  # Store PIL Image
+            "image_base64": image_base64,
+            "prompt": prompt_str,
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": num_inference_steps,
+            "seed": None,
+            "name": None
+        }
+        
+        # Add to storage and keep max 30
+        STORAGE_IMAGE_DATA.append(image_data)
+        if len(STORAGE_IMAGE_DATA) > 30:
+            STORAGE_IMAGE_DATA.pop(0)  # Remove oldest
+        
+        response_data = {
+            "success": True,
+            "image_base64": image_base64,
+            "image_id": new_image_id,
+            "side": side,
+            "add": add_pixels
+        }
+        
+        return JSONResponse(response_data)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+
 
 
 # ==========================================================
 # API 3D FIELD
 # ==========================================================
+
+@app.post("/api/generate_3d_field")
+async def generate_3d_field(
+    image_id: str = Form(...)
+):
+    """
+    Generate a 3D point cloud field from the selected image using depth estimation.
+    Returns point cloud data (points and colors) for visualization in Three.js.
+    """
+    try:
+        # Find the image in storage
+        source_image_data = None
+        for img_data in STORAGE_IMAGE_DATA:
+            if img_data["image_id"] == image_id:
+                source_image_data = img_data
+                break
+        
+        if source_image_data is None:
+            return JSONResponse({
+                "success": False,
+                "error": "Image not found in storage"
+            }, status_code=404)
+        
+        # Get PIL Image from storage
+        img_pil = source_image_data["image"]
+        W, H = img_pil.size
+        img_np = np.array(img_pil)
+        img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        
+        # Generate depth map
+        with torch.no_grad():
+            depth = depth_anything_v2_model.infer_image(img_bgr, input_size=518)
+        depth = depth.astype(np.float32)
+        
+        # Normalize depth to a unit cube in Z
+        # Map depth -> z in [-1, +1], with z=0 around the median of depth
+        d_min = float(np.min(depth))
+        d_max = float(np.max(depth))
+        if d_max - d_min < 1e-6:
+            return JSONResponse({
+                "success": False,
+                "error": "Depth map appears to be constant"
+            }, status_code=400)
+        
+        d_med = float(np.median(depth))
+        
+        # Map to [-1, +1] with median ~ 0
+        scale = max(d_max - d_med, d_med - d_min)
+        z_norm = (depth - d_med) / (scale + 1e-8)
+        z_norm = np.clip(z_norm, -1.0, 1.0)
+        
+        # Back-project to 3D (simple pinhole, fx=fy=max(W,H))
+        # X and Y are scaled so the full image spans ~2 units across the shorter side
+        fx = fy = float(max(W, H))
+        cx, cy = (W - 1) * 0.5, (H - 1) * 0.5
+        
+        u = np.arange(W, dtype=np.float32)[None, :].repeat(H, axis=0)
+        v = np.arange(H, dtype=np.float32)[:, None].repeat(W, axis=1)
+        
+        Z = z_norm  # [-1,1]
+        X = (u - cx) / fx * 2.0  # roughly [-1,1] across width
+        Y = -(v - cy) / fx * 2.0  # roughly [-aspect, aspect], flip Y for conventional view
+        
+        pts = np.stack([X, Y, Z], axis=-1).reshape(-1, 3)
+        
+        # Color the point cloud from the RGB image
+        colors = (img_np.reshape(-1, 3) / 255.0).astype(np.float32)
+        
+        # Downsample for performance (keep every Nth point)
+        downsample_factor = max(1, int(np.sqrt(H * W) / 100))  # Adaptive downsampling
+        if downsample_factor > 1:
+            mask = np.arange(len(pts)) % downsample_factor == 0
+            pts = pts[mask]
+            colors = colors[mask]
+        
+        # Convert to lists for JSON serialization
+        points_list = pts.tolist()
+        colors_list = colors.tolist()
+        
+        response_data = {
+            "success": True,
+            "points": points_list,
+            "colors": colors_list,
+            "num_points": len(points_list)
+        }
+        
+        return JSONResponse(response_data)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
 
 
 
