@@ -1,16 +1,6 @@
 # =============================================================
-# Diffusion Dashboard Server
+# continuous-diffusion
 # =============================================================
-
-
-# =============================================================
-# Global libraries
-# =============================================================
-
-# to paste processing before do_run()
-# DO BASE REFINER ENSEMBLE OF EXPERT DENOISERS
-# https://huggingface.co/docs/diffusers/using-diffusers/sdxl
-
 
 # =============================================================
 # =============================================================
@@ -22,7 +12,6 @@ import base64
 import io
 from typing import Optional
 
-
 # =============================================================
 # =============================================================
 
@@ -33,8 +22,6 @@ import matplotlib
 
 from diffusers import DiffusionPipeline
 from diffusers import StableDiffusionXLInpaintPipeline
-
-
 
 from PIL import Image
 
@@ -70,15 +57,13 @@ async def root():
 # =============================================================
 # =============================================================
 
-
+local_model_path = "models"
+local_libs_path = "libs"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float16 if (DEVICE == "cuda") else torch.float32
 
-local_model_path = "models"
-
 SDXL_PATH = "models/sd_xl_base_1.0.safetensors"
-SAM_CKPT = "models/sam_vit_h_4b8939.pth"
 HF_SDXL_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 
@@ -149,14 +134,12 @@ depth_anything_v2_model.load_state_dict(torch.load(f'models/depth_anything_v2_{e
 depth_anything_v2_model = depth_anything_v2_model.to(DEVICE).eval()
 
 
+
 # ==========================================================
-# STORAGE
+# STORAGE: In-memory image storage (max 30 images)
 # ==========================================================
 
-
-
-
-storage_image_data = []
+STORAGE_IMAGE_DATA = []
 
 
 def pil_to_base64(image: Image.Image) -> str:
@@ -181,14 +164,10 @@ initial_image_data = {
     "seed": None,
     "name": None
 }
-storage_image_data.append(initial_image_data)
+STORAGE_IMAGE_DATA.append(initial_image_data)
 
 
 
-
-# ==========================================================
-# API ENDPOINTS
-# ==========================================================
 
 
 
@@ -208,7 +187,7 @@ async def get_storage_data():
         # Return the metadata that was already saved with each image
         # Just exclude the large image data fields for the response
         storage_list = []
-        for idx, img_data in enumerate(storage_image_data, start=1):
+        for idx, img_data in enumerate(STORAGE_IMAGE_DATA, start=1):
             # The metadata (prompt, guidance_scale, etc.) was saved when image was created
             # We just extract it and exclude the image/image_base64 fields
             metadata = {
@@ -224,7 +203,7 @@ async def get_storage_data():
         
         return JSONResponse({
             "success": True,
-            "count": len(storage_image_data),
+            "count": len(STORAGE_IMAGE_DATA),
             "images": storage_list
         })
     except Exception as e:
@@ -243,7 +222,7 @@ async def get_image_by_id(image_id: str):
     """
     try:
         # Find the image in storage
-        for img_data in storage_image_data:
+        for img_data in STORAGE_IMAGE_DATA:
             if img_data["image_id"] == image_id:
                 return JSONResponse({
                     "success": True,
@@ -327,9 +306,9 @@ async def generate_txt_to_image_sdxl_fp16(
         }
         
         # Add to storage and keep max 30
-        storage_image_data.append(image_data)
-        if len(storage_image_data) > 30:
-            storage_image_data.pop(0)  # Remove oldest
+        STORAGE_IMAGE_DATA.append(image_data)
+        if len(STORAGE_IMAGE_DATA) > 30:
+            STORAGE_IMAGE_DATA.pop(0)  # Remove oldest
         
 
         response_data = {
@@ -425,9 +404,9 @@ async def generate_txt_to_image_sdxl_refined(
         }
         
         # Add to storage and keep max 30
-        storage_image_data.append(image_data)
-        if len(storage_image_data) > 30:
-            storage_image_data.pop(0)  # Remove oldest
+        STORAGE_IMAGE_DATA.append(image_data)
+        if len(STORAGE_IMAGE_DATA) > 30:
+            STORAGE_IMAGE_DATA.pop(0)  # Remove oldest
         
 
         response_data = {
@@ -478,7 +457,7 @@ async def generate_image_to_image_refiner(
     try:
         # Find the image in storage
         source_image_data = None
-        for img_data in storage_image_data:
+        for img_data in STORAGE_IMAGE_DATA:
             if img_data["image_id"] == image_id:
                 source_image_data = img_data
                 break
@@ -597,9 +576,9 @@ async def generate_image_to_image_refiner(
         }
         
         # Add to storage and keep max 30
-        storage_image_data.append(image_data)
-        if len(storage_image_data) > 30:
-            storage_image_data.pop(0)  # Remove oldest
+        STORAGE_IMAGE_DATA.append(image_data)
+        if len(STORAGE_IMAGE_DATA) > 30:
+            STORAGE_IMAGE_DATA.pop(0)  # Remove oldest
         
         response_data = {
             "success": True,
@@ -656,7 +635,7 @@ async def generate_zoom_img2img(
     try:
         # Find the image in storage
         source_image_data = None
-        for img_data in storage_image_data:
+        for img_data in STORAGE_IMAGE_DATA:
             if img_data["image_id"] == image_id:
                 source_image_data = img_data
                 break
@@ -732,9 +711,9 @@ async def generate_zoom_img2img(
         }
         
         # Add to storage and keep max 30
-        storage_image_data.append(image_data)
-        if len(storage_image_data) > 30:
-            storage_image_data.pop(0)  # Remove oldest
+        STORAGE_IMAGE_DATA.append(image_data)
+        if len(STORAGE_IMAGE_DATA) > 30:
+            STORAGE_IMAGE_DATA.pop(0)  # Remove oldest
         
         response_data = {
             "success": True,
@@ -766,7 +745,7 @@ async def generate_depth_map(
     try:
         # Find the image in storage
         source_image_data = None
-        for img_data in storage_image_data:
+        for img_data in STORAGE_IMAGE_DATA:
             if img_data["image_id"] == image_id:
                 source_image_data = img_data
                 break
@@ -823,9 +802,9 @@ async def generate_depth_map(
         }
         
         # Add to storage and keep max 30
-        storage_image_data.append(image_data)
-        if len(storage_image_data) > 30:
-            storage_image_data.pop(0)  # Remove oldest
+        STORAGE_IMAGE_DATA.append(image_data)
+        if len(STORAGE_IMAGE_DATA) > 30:
+            STORAGE_IMAGE_DATA.pop(0)  # Remove oldest
         
         response_data = {
             "success": True,
@@ -846,7 +825,7 @@ async def generate_depth_map(
 
 
 # ==========================================================
-# API SEGMENTATION
+# API 3D FIELD
 # ==========================================================
 
 

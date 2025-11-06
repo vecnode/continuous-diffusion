@@ -5,7 +5,7 @@ Under heavy development.
 ### Models used
 
 ```
-stabilityai/stable-diffusion-xl-base-1.0"
+stabilityai/stable-diffusion-xl-base-1.0
 stabilityai/stable-diffusion-xl-refiner-1.0
 depth_anything_v2_vitl
 ```
