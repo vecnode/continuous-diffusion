@@ -1,3 +1,5 @@
+// vecnode 2025
+
 // Fast local communication for image generation
 // Global variable to track current displayed image
 let CURRENT_TEXTURE = null;
@@ -376,6 +378,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const generateDepthBtnText = document.getElementById("generate-depth-btn-text");
     const generate3dFieldBtn = document.getElementById("generate-3d-field-btn");
     const generate3dFieldBtnText = document.getElementById("generate-3d-field-btn-text");
+    const generateControlnetBtn = document.getElementById("generate-controlnet-btn");
+    const generateControlnetBtnText = document.getElementById("generate-controlnet-btn-text");
     const pointsToMeshBtn = document.getElementById("points-to-mesh-btn");
     const pointsToMeshBtnText = document.getElementById("points-to-mesh-btn-text");
     const outpaintBtn = document.getElementById("outpaint-btn");
@@ -783,6 +787,78 @@ document.addEventListener("DOMContentLoaded", () => {
             // Re-enable button
             generate3Btn.disabled = false;
             generate3BtnText.textContent = "GENERATE 3";
+        }
+    });
+    
+    // Generate ControlNet button handler
+    generateControlnetBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        
+        // Check if an image is selected
+        if (!CURRENT_TEXTURE) {
+            status.className = "mt-3 small fw-semibold text-danger";
+            status.textContent = "ERROR: Please select an image first";
+            return;
+        }
+        
+        // Disable button and show loading
+        generateControlnetBtn.disabled = true;
+        generateControlnetBtnText.textContent = "GENERATING";
+
+        status.className = "mt-3 small fw-semibold text-info";
+        status.textContent = "GENERATING CONTROLNET WITH 0.9X ZOOM PLEASE WAIT";
+
+        try {
+            const formData = new FormData(form);
+            formData.append("image_id", CURRENT_TEXTURE);
+            
+            // Fast local POST request to generate_controlnet endpoint
+            const startTime = Date.now();
+            const response = await fetch("/api/generate_controlnet", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+                throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+            if (data.success) {
+                status.className = "mt-3 small fw-semibold text-success";
+                status.textContent = `SUCCESS GENERATED IN ${elapsed}S`;
+                
+                generationDashboard.innerHTML = `
+                    <img id="generated-image" src="${data.image_base64}" alt="Generated image" />
+                `;
+                
+                // Update CURRENT_TEXTURE after generation
+                CURRENT_TEXTURE = data.image_id;
+                
+                // Add texture to 3D scene
+                if (scene3d) {
+                    TEXTURE_MANAGER.addTexture(data.image_id, data.image_base64, scene3d);
+                }
+                
+                // Update dropdown to select the newly generated image
+                storageDropdown.value = data.image_id;
+                
+                // Refresh storage to update count
+                refreshStorage();
+            } else {
+                status.className = "mt-3 small fw-semibold text-danger";
+                status.textContent = `ERROR: ${data.error}`;
+            }
+        } catch (error) {
+            status.className = "mt-3 small fw-semibold text-danger";
+            status.textContent = `ERROR: ${error.message}`;
+        } finally {
+            // Re-enable button
+            generateControlnetBtn.disabled = false;
+            generateControlnetBtnText.textContent = "Generate ControlNet";
         }
     });
     
